@@ -30,6 +30,11 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
+Artifacts produced:
+- macOS: `.dmg`
+- Windows: `.msi`
+- Linux: `.AppImage`
+
 ## Dependencies
 - Qt 6 (Widgets, Charts)
 - libcurl

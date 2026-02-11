@@ -17,11 +17,11 @@ jobs:
       matrix:
         include:
           - os: macos-latest
-            artifact: VMSstreamerQt-macos.zip
+            artifact: VMSstreamerQt-macos.dmg
           - os: windows-latest
-            artifact: VMSstreamerQt-windows.zip
+            artifact: VMSstreamerQt-windows.msi
           - os: ubuntu-20.04
-            artifact: VMSstreamerQt-linux.tar.gz
+            artifact: VMSstreamerQt-linux.AppImage
 
     steps:
       - name: Checkout
@@ -39,11 +39,17 @@ jobs:
           brew update
           brew install curl openssl@3
 
+      - name: Install dependencies (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install wixtoolset --no-progress
+
       - name: Install dependencies (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libcurl4-openssl-dev libssl-dev
+          sudo apt-get install -y libcurl4-openssl-dev libssl-dev libfuse2
 
       - name: Install vcpkg deps (Windows)
         if: runner.os == 'Windows'
@@ -68,21 +74,36 @@ jobs:
       - name: Install
         run: cmake --install build --config Release --prefix install
 
-      - name: Package (macOS)
+      - name: Package (macOS DMG)
         if: runner.os == 'macOS'
         run: |
-          ditto -c -k --sequesterRsrc --keepParent install/VMSstreamerQt.app ${{ matrix.artifact }}
+          hdiutil create -volname VMSstreamerQt -srcfolder install/VMSstreamerQt.app -ov -format UDZO ${{ matrix.artifact }}
 
-      - name: Package (Windows)
+      - name: Package (Windows MSI)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          Compress-Archive -Path install/* -DestinationPath ${{ matrix.artifact }}
+          cpack --config build/CPackConfig.cmake -B package -G WIX
+          $msi = Get-ChildItem package -Filter *.msi | Select-Object -First 1
+          if (-not $msi) { throw \"MSI not found\" }
+          Copy-Item $msi.FullName ${{ matrix.artifact }}
 
-      - name: Package (Linux)
+      - name: Package (Linux AppImage)
         if: runner.os == 'Linux'
         run: |
-          tar -czf ${{ matrix.artifact }} -C install .
+          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage -O linuxdeploy.AppImage
+          wget -q https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage -O linuxdeploy-plugin-qt.AppImage
+          chmod +x linuxdeploy.AppImage linuxdeploy-plugin-qt.AppImage
+          cmake --install build --config Release --prefix AppDir/usr
+          export QTDIR="${QT_ROOT_DIR}"
+          export PATH="${QT_ROOT_DIR}/bin:${PATH}"
+          ./linuxdeploy.AppImage --appdir AppDir \
+            --desktop-file packaging/VMSstreamerQt.desktop \
+            --icon-file resources/vmsstreamer.png \
+            --plugin qt \
+            --output appimage
+          APPIMAGE=$(ls *.AppImage | head -n 1)
+          mv "$APPIMAGE" "${{ matrix.artifact }}"
 
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2

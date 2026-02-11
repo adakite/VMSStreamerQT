@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=VMSstreamerQt
+Comment=Stream and plot Quaraze data
+Exec=VMSstreamerQt
+Icon=vmsstreamer
+Terminal=false
+Categories=Science;Utility;
