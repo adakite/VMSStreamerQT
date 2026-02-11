@@ -1,5 +1,7 @@
 # Build output
-/build/
+/build/*
+!/build/VMSstreamerQt.app/
+!/build/VMSstreamerQt.app/**
 CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake
@@ -10,7 +12,6 @@ compile_commands.json
 
 # macOS
 .DS_Store
-*.app
 
 # Qt Creator
 *.pro.user

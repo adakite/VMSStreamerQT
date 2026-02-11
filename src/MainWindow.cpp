@@ -15,6 +15,7 @@
 #include <QPainter>
 #include <QPageSize>
 #include <QPdfWriter>
+#include <QSaveFile>
 #include <QSet>
 #include <QSplitter>
 #include <QStandardPaths>
@@ -222,7 +223,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
 
     auto *controlLayout = new QHBoxLayout();
     useFtpCheck_ = new QCheckBox("Use FTP data", this);
-    useFtpCheck_->setChecked(true);
+    useFtpCheck_->setChecked(false);
     reloadButton_ = new QPushButton("Reload", this);
     statusLabel_ = new QLabel("Ready", this);
     statusLabel_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
@@ -232,6 +233,31 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     controlLayout->addStretch();
     controlLayout->addWidget(statusLabel_);
     mainLayout->addLayout(controlLayout);
+
+    auto *localLayout = new QHBoxLayout();
+    auto *localLabel = new QLabel("Local file", this);
+    localFileEdit_ = new QLineEdit(this);
+    localFileEdit_->setPlaceholderText("Choose a CSV file...");
+    localFileEdit_->setText(defaultLocalFile());
+    browseLocalFileButton_ = new QPushButton("Browse…", this);
+
+    localLayout->addWidget(localLabel);
+    localLayout->addWidget(localFileEdit_, 1);
+    localLayout->addWidget(browseLocalFileButton_);
+    mainLayout->addLayout(localLayout);
+
+    auto *saveLayout = new QHBoxLayout();
+    saveFtpCheck_ = new QCheckBox("Save FTP data to", this);
+    saveFtpCheck_->setChecked(false);
+    saveDirEdit_ = new QLineEdit(this);
+    saveDirEdit_->setReadOnly(true);
+    saveDirEdit_->setText(defaultSaveDir());
+    browseSaveDirButton_ = new QPushButton("Choose…", this);
+
+    saveLayout->addWidget(saveFtpCheck_);
+    saveLayout->addWidget(saveDirEdit_, 1);
+    saveLayout->addWidget(browseSaveDirButton_);
+    mainLayout->addLayout(saveLayout);
 
     varList_ = new QListWidget(this);
     varList_->setSelectionMode(QAbstractItemView::MultiSelection);
@@ -265,13 +291,18 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     chartView_->setVisible(false);
     mainLayout->addWidget(chartView_, 3);
 
-    connect(reloadButton_, &QPushButton::clicked, this, &MainWindow::loadData);
-    connect(useFtpCheck_, &QCheckBox::toggled, this, &MainWindow::loadData);
+    connect(reloadButton_, &QPushButton::clicked, this, [this]() { loadData(false); });
+    connect(useFtpCheck_, &QCheckBox::toggled, this, &MainWindow::updateSourceControls);
+    connect(saveFtpCheck_, &QCheckBox::toggled, this, &MainWindow::updateSaveControls);
+    connect(browseSaveDirButton_, &QPushButton::clicked, this, &MainWindow::chooseSaveDir);
+    connect(browseLocalFileButton_, &QPushButton::clicked, this, &MainWindow::chooseLocalFile);
     connect(plotButton_, &QPushButton::clicked, this, &MainWindow::plotSelected);
     connect(saveButton_, &QPushButton::clicked, this, &MainWindow::savePlot);
     connect(quitButton_, &QPushButton::clicked, qApp, &QCoreApplication::quit);
 
-    loadData();
+    updateSourceControls();
+    updateSaveControls();
+    loadData(true);
 }
 
 QString MainWindow::locateFile(const QString &filename) const {
@@ -382,6 +413,65 @@ bool MainWindow::loadCredentials(QString *host, QString *user, QString *pass, QS
     if (!decodeValue("ftp_user", userValue, user)) return false;
     if (!decodeValue("ftp_pass", passValue, pass)) return false;
     return true;
+}
+
+QString MainWindow::defaultSaveDir() const {
+    QString base = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+    if (base.isEmpty()) {
+        base = QDir::homePath();
+    }
+    return QDir(base).filePath("VMSstreamerQt");
+}
+
+QString MainWindow::defaultLocalFile() const {
+    const QString path = locateFile(kDataFileName);
+    return path;
+}
+
+void MainWindow::updateSaveControls() {
+    const bool enabled = saveFtpCheck_ && saveFtpCheck_->isChecked();
+    if (saveDirEdit_) saveDirEdit_->setEnabled(enabled);
+    if (browseSaveDirButton_) browseSaveDirButton_->setEnabled(enabled);
+}
+
+void MainWindow::updateSourceControls() {
+    const bool useFtp = useFtpCheck_ && useFtpCheck_->isChecked();
+    if (localFileEdit_) localFileEdit_->setEnabled(!useFtp);
+    if (browseLocalFileButton_) browseLocalFileButton_->setEnabled(!useFtp);
+
+    if (saveFtpCheck_) {
+        saveFtpCheck_->setEnabled(useFtp);
+        if (!useFtp) {
+            saveFtpCheck_->setChecked(false);
+        }
+    }
+    updateSaveControls();
+}
+
+void MainWindow::chooseSaveDir() {
+    QString start = saveDirEdit_ ? saveDirEdit_->text().trimmed() : QString();
+    if (start.isEmpty()) {
+        start = defaultSaveDir();
+    }
+    const QString dir = QFileDialog::getExistingDirectory(this, "Choose Save Directory", start);
+    if (!dir.isEmpty() && saveDirEdit_) {
+        saveDirEdit_->setText(dir);
+    }
+}
+
+void MainWindow::chooseLocalFile() {
+    QString start = localFileEdit_ ? localFileEdit_->text().trimmed() : QString();
+    if (start.isEmpty()) {
+        start = locateFile(kDataFileName);
+    }
+    const QString path = QFileDialog::getOpenFileName(
+        this,
+        "Choose CSV File",
+        start,
+        "CSV Files (*.csv);;All Files (*)");
+    if (!path.isEmpty() && localFileEdit_) {
+        localFileEdit_->setText(path);
+    }
 }
 
 bool MainWindow::downloadFtpFile(const QString &host,
@@ -592,7 +682,7 @@ void MainWindow::populatePreview() {
     previewTable_->resizeColumnsToContents();
 }
 
-void MainWindow::loadData() {
+void MainWindow::loadData(bool quiet) {
     statusLabel_->setText("Loading data...");
     QCoreApplication::processEvents();
 
@@ -605,43 +695,91 @@ void MainWindow::loadData() {
         QString pass;
         if (!loadCredentials(&host, &user, &pass, &error)) {
             statusLabel_->setText("Load failed");
-            QMessageBox::critical(this, "Load Error", error);
+            if (!quiet) {
+                QMessageBox::critical(this, "Load Error", error);
+            }
             return;
         }
 
         QByteArray payload;
         if (!downloadFtpFile(host, user, pass, &payload, &error)) {
             statusLabel_->setText("Load failed");
-            QMessageBox::critical(this, "FTP Error", error);
+            if (!quiet) {
+                QMessageBox::critical(this, "FTP Error", error);
+            }
             return;
+        }
+
+        if (saveFtpCheck_ && saveFtpCheck_->isChecked()) {
+            QString dirPath = saveDirEdit_ ? saveDirEdit_->text().trimmed() : QString();
+            if (dirPath.isEmpty()) {
+                dirPath = defaultSaveDir();
+                if (saveDirEdit_) {
+                    saveDirEdit_->setText(dirPath);
+                }
+            }
+            QDir dir(dirPath);
+            if (!dir.exists() && !dir.mkpath(".")) {
+                statusLabel_->setText("Save failed");
+                QMessageBox::critical(this, "Save Error",
+                                      QString("Failed to create directory: %1").arg(dirPath));
+                return;
+            }
+
+            const QString filePath = dir.filePath(kDataFileName);
+            QSaveFile outFile(filePath);
+            if (!outFile.open(QIODevice::WriteOnly)) {
+                statusLabel_->setText("Save failed");
+                QMessageBox::critical(this, "Save Error",
+                                      QString("Failed to write file: %1").arg(outFile.errorString()));
+                return;
+            }
+            outFile.write(payload);
+            if (!outFile.commit()) {
+                statusLabel_->setText("Save failed");
+                QMessageBox::critical(this, "Save Error",
+                                      QString("Failed to save file: %1").arg(outFile.errorString()));
+                return;
+            }
         }
 
         QBuffer buffer(&payload);
         buffer.open(QIODevice::ReadOnly);
         if (!loadCsvFromDevice(&buffer, &loaded, &error)) {
             statusLabel_->setText("Load failed");
-            QMessageBox::critical(this, "CSV Error", error);
+            if (!quiet) {
+                QMessageBox::critical(this, "CSV Error", error);
+            }
             return;
         }
     } else {
-        const QString path = locateFile(kDataFileName);
+        QString path = localFileEdit_ ? localFileEdit_->text().trimmed() : QString();
         if (path.isEmpty()) {
-            statusLabel_->setText("Load failed");
-            QMessageBox::critical(this, "Load Error", "Quaraze.csv not found next to the app.");
+            path = locateFile(kDataFileName);
+        }
+        if (path.isEmpty()) {
+            statusLabel_->setText("No local file selected");
+            if (!quiet) {
+                QMessageBox::information(this, "Load Data", "Select a local CSV file to load.");
+            }
             return;
         }
 
         QFile file(path);
         if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
             statusLabel_->setText("Load failed");
-            QMessageBox::critical(this, "Load Error",
-                                  QString("Failed to open Quaraze.csv: %1").arg(file.errorString()));
+            if (!quiet) {
+                QMessageBox::critical(this, "Load Error",
+                                      QString("Failed to open file: %1").arg(file.errorString()));
+            }
             return;
         }
 
         if (!loadCsvFromDevice(&file, &loaded, &error)) {
             statusLabel_->setText("Load failed");
-            QMessageBox::critical(this, "CSV Error", error);
+            if (!quiet) {
+                QMessageBox::critical(this, "CSV Error", error);
+            }
             return;
         }
     }

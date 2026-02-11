@@ -35,6 +35,17 @@ Artifacts produced:
 - Windows: `.msi`
 - Linux: `.AppImage`
 
+## macOS Signing & Notarization (for DMG)
+To avoid the “app is damaged” Gatekeeper warning, set these GitHub secrets:
+- `MACOS_CERTIFICATE` (base64 of your Developer ID Application .p12)
+- `MACOS_CERTIFICATE_PASSWORD`
+- `MACOS_SIGN_IDENTITY` (e.g. `Developer ID Application: Your Name (TEAMID)`)
+- `APPLE_ID`
+- `APPLE_TEAM_ID`
+- `APPLE_APP_PASSWORD` (App-specific password)
+
+If these are not set, the DMG will be unsigned and macOS will show a warning.
+
 ## Dependencies
 - Qt 6 (Widgets, Charts)
 - libcurl

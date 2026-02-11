@@ -4,6 +4,7 @@
 #include <QDateTime>
 #include <QLabel>
 #include <QListWidget>
+#include <QLineEdit>
 #include <QMainWindow>
 #include <QIODevice>
 #include <QPushButton>
@@ -19,9 +20,11 @@ public:
     explicit MainWindow(QWidget *parent = nullptr);
 
 private slots:
-    void loadData();
+    void loadData(bool quiet = false);
     void plotSelected();
     void savePlot();
+    void chooseSaveDir();
+    void chooseLocalFile();
 
 private:
     struct TableData {
@@ -40,11 +43,20 @@ private:
     bool loadCsvFromDevice(QIODevice *device, TableData *out, QString *error) const;
     QStringList parseCsvLine(const QString &line) const;
     QDateTime parseTimestamp(const QString &text) const;
+    QString defaultSaveDir() const;
+    QString defaultLocalFile() const;
+    void updateSaveControls();
+    void updateSourceControls();
     void populateVariables();
     void populatePreview();
     void resetChart();
 
     QCheckBox *useFtpCheck_ = nullptr;
+    QCheckBox *saveFtpCheck_ = nullptr;
+    QLineEdit *saveDirEdit_ = nullptr;
+    QPushButton *browseSaveDirButton_ = nullptr;
+    QLineEdit *localFileEdit_ = nullptr;
+    QPushButton *browseLocalFileButton_ = nullptr;
     QLabel *statusLabel_ = nullptr;
     QListWidget *varList_ = nullptr;
     QTableWidget *previewTable_ = nullptr;
