@@ -1,0 +1,27 @@
+# Build output
+/build/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+*.ninja
+*.ninja_deps
+*.ninja_log
+compile_commands.json
+
+# macOS
+.DS_Store
+*.app
+
+# Qt Creator
+*.pro.user
+*.pro.user.*
+*.qbs.user
+*.qbs.user.*
+
+# Logs
+*.log
+
+# Credentials (keep out of repo)
+credentials.json
+key.key
+credentials.encrypted.json
