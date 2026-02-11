@@ -77,3 +77,20 @@ if(APPLE)
         MACOSX_BUNDLE_ICON_FILE "vmsstreamer.icns"
     )
 endif()
+
+include(GNUInstallDirs)
+
+install(TARGETS vms_streamer_qt
+    BUNDLE DESTINATION .
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+)
+
+# Deploy Qt runtime dependencies when installing.
+if(COMMAND qt_generate_deploy_app_script)
+    qt_generate_deploy_app_script(
+        TARGET vms_streamer_qt
+        OUTPUT_SCRIPT deploy_script
+        NO_UNSUPPORTED_PLATFORM_ERROR
+    )
+    install(SCRIPT ${deploy_script})
+endif()

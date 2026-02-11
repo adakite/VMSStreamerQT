@@ -23,6 +23,13 @@ cmake --build build
 open build/VMSstreamerQt.app
 ```
 
+## Release (GitHub Actions)
+Tag a version to produce macOS/Windows/Linux release assets:
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
 ## Dependencies
 - Qt 6 (Widgets, Charts)
 - libcurl
