@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QByteArray>
 #include <QCheckBox>
 #include <QDateTime>
 #include <QLabel>
@@ -23,6 +24,7 @@ private slots:
     void loadData(bool quiet = false);
     void plotSelected();
     void savePlot();
+    void saveFtpData();
     void chooseSaveDir();
     void chooseLocalFile();
 
@@ -47,6 +49,7 @@ private:
     QString defaultLocalFile() const;
     void updateSaveControls();
     void updateSourceControls();
+    bool saveFtpPayload(const QByteArray &payload, QString *error, QString *savedPath = nullptr);
     void populateVariables();
     void populatePreview();
     void resetChart();
@@ -55,6 +58,7 @@ private:
     QCheckBox *saveFtpCheck_ = nullptr;
     QLineEdit *saveDirEdit_ = nullptr;
     QPushButton *browseSaveDirButton_ = nullptr;
+    QPushButton *saveFtpButton_ = nullptr;
     QLineEdit *localFileEdit_ = nullptr;
     QPushButton *browseLocalFileButton_ = nullptr;
     QLabel *statusLabel_ = nullptr;

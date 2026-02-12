@@ -253,10 +253,12 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     saveDirEdit_->setReadOnly(true);
     saveDirEdit_->setText(defaultSaveDir());
     browseSaveDirButton_ = new QPushButton("Choose…", this);
+    saveFtpButton_ = new QPushButton("Save", this);
 
     saveLayout->addWidget(saveFtpCheck_);
     saveLayout->addWidget(saveDirEdit_, 1);
     saveLayout->addWidget(browseSaveDirButton_);
+    saveLayout->addWidget(saveFtpButton_);
     mainLayout->addLayout(saveLayout);
 
     varList_ = new QListWidget(this);
@@ -295,6 +297,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     connect(useFtpCheck_, &QCheckBox::toggled, this, &MainWindow::updateSourceControls);
     connect(saveFtpCheck_, &QCheckBox::toggled, this, &MainWindow::updateSaveControls);
     connect(browseSaveDirButton_, &QPushButton::clicked, this, &MainWindow::chooseSaveDir);
+    connect(saveFtpButton_, &QPushButton::clicked, this, &MainWindow::saveFtpData);
     connect(browseLocalFileButton_, &QPushButton::clicked, this, &MainWindow::chooseLocalFile);
     connect(plotButton_, &QPushButton::clicked, this, &MainWindow::plotSelected);
     connect(saveButton_, &QPushButton::clicked, this, &MainWindow::savePlot);
@@ -432,6 +435,7 @@ void MainWindow::updateSaveControls() {
     const bool enabled = saveFtpCheck_ && saveFtpCheck_->isChecked();
     if (saveDirEdit_) saveDirEdit_->setEnabled(enabled);
     if (browseSaveDirButton_) browseSaveDirButton_->setEnabled(enabled);
+    if (saveFtpButton_) saveFtpButton_->setEnabled(enabled);
 }
 
 void MainWindow::updateSourceControls() {
@@ -472,6 +476,87 @@ void MainWindow::chooseLocalFile() {
     if (!path.isEmpty() && localFileEdit_) {
         localFileEdit_->setText(path);
     }
+}
+
+bool MainWindow::saveFtpPayload(const QByteArray &payload, QString *error, QString *savedPath) {
+    QString dirPath = saveDirEdit_ ? saveDirEdit_->text().trimmed() : QString();
+    if (dirPath.isEmpty()) {
+        dirPath = defaultSaveDir();
+        if (saveDirEdit_) {
+            saveDirEdit_->setText(dirPath);
+        }
+    }
+
+    QDir dir(dirPath);
+    if (!dir.exists() && !dir.mkpath(".")) {
+        if (error) {
+            *error = QString("Failed to create directory: %1").arg(dirPath);
+        }
+        return false;
+    }
+
+    const QString filePath = dir.filePath(kDataFileName);
+    QSaveFile outFile(filePath);
+    if (!outFile.open(QIODevice::WriteOnly)) {
+        if (error) {
+            *error = QString("Failed to write file: %1").arg(outFile.errorString());
+        }
+        return false;
+    }
+
+    if (outFile.write(payload) != payload.size()) {
+        if (error) {
+            *error = QString("Failed to write complete file: %1").arg(outFile.errorString());
+        }
+        return false;
+    }
+    if (!outFile.commit()) {
+        if (error) {
+            *error = QString("Failed to save file: %1").arg(outFile.errorString());
+        }
+        return false;
+    }
+
+    if (savedPath) {
+        *savedPath = filePath;
+    }
+    return true;
+}
+
+void MainWindow::saveFtpData() {
+    if (!useFtpCheck_ || !useFtpCheck_->isChecked()) {
+        QMessageBox::information(this, "Save FTP Data", "Enable 'Use FTP data' before saving.");
+        return;
+    }
+
+    statusLabel_->setText("Saving FTP data...");
+    QCoreApplication::processEvents();
+
+    QString host;
+    QString user;
+    QString pass;
+    QString error;
+    if (!loadCredentials(&host, &user, &pass, &error)) {
+        statusLabel_->setText("Save failed");
+        QMessageBox::critical(this, "Save Error", error);
+        return;
+    }
+
+    QByteArray payload;
+    if (!downloadFtpFile(host, user, pass, &payload, &error)) {
+        statusLabel_->setText("Save failed");
+        QMessageBox::critical(this, "FTP Error", error);
+        return;
+    }
+
+    QString savedPath;
+    if (!saveFtpPayload(payload, &error, &savedPath)) {
+        statusLabel_->setText("Save failed");
+        QMessageBox::critical(this, "Save Error", error);
+        return;
+    }
+
+    statusLabel_->setText(QString("Saved %1").arg(QFileInfo(savedPath).fileName()));
 }
 
 bool MainWindow::downloadFtpFile(const QString &host,
@@ -711,34 +796,9 @@ void MainWindow::loadData(bool quiet) {
         }
 
         if (saveFtpCheck_ && saveFtpCheck_->isChecked()) {
-            QString dirPath = saveDirEdit_ ? saveDirEdit_->text().trimmed() : QString();
-            if (dirPath.isEmpty()) {
-                dirPath = defaultSaveDir();
-                if (saveDirEdit_) {
-                    saveDirEdit_->setText(dirPath);
-                }
-            }
-            QDir dir(dirPath);
-            if (!dir.exists() && !dir.mkpath(".")) {
+            if (!saveFtpPayload(payload, &error)) {
                 statusLabel_->setText("Save failed");
-                QMessageBox::critical(this, "Save Error",
-                                      QString("Failed to create directory: %1").arg(dirPath));
-                return;
-            }
-
-            const QString filePath = dir.filePath(kDataFileName);
-            QSaveFile outFile(filePath);
-            if (!outFile.open(QIODevice::WriteOnly)) {
-                statusLabel_->setText("Save failed");
-                QMessageBox::critical(this, "Save Error",
-                                      QString("Failed to write file: %1").arg(outFile.errorString()));
-                return;
-            }
-            outFile.write(payload);
-            if (!outFile.commit()) {
-                statusLabel_->setText("Save failed");
-                QMessageBox::critical(this, "Save Error",
-                                      QString("Failed to save file: %1").arg(outFile.errorString()));
+                QMessageBox::critical(this, "Save Error", error);
                 return;
             }
         }
